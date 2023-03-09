@@ -16,6 +16,10 @@ scraper.scrape_profiles()
 
 ### Setup
 
+### Accounts
+To setupd your linkedin account, your username and password to the input.txt file in the following format
+> username:password
+
 #### Proxies
 
 To setup the proxy functionality of the scraper you must configure boto3 with your aws account
