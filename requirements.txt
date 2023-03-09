@@ -1,0 +1,6 @@
+requests
+beautifulsoup4
+lxml
+boto3
+git+https://github.com/tomquirk/linkedin-api.git
+
