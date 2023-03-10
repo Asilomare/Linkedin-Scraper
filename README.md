@@ -24,10 +24,9 @@ To setupd your linkedin account, your username and password to the input.txt fil
 
 To setup the proxy functionality of the scraper you must configure boto3 with your aws account
 
-> [#link to boto3 setp](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html)
-> 
+> [(https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html]
 ### Dependencies
 
 - Python 3.7
 - A valid Linkedin user account (don't use your personal account, if possible)
-- AWS CLI configured (required for proxies, can use without althoug not advisable)
+- AWS CLI configured (required for proxies, can use without although not advisable)
