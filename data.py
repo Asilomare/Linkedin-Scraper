@@ -1,11 +1,40 @@
  
 def get_offset(config, keyword, str):
+    """
+    when a keyword is searched for the initial results are always the same,
+    so we skip the initial results using the offset feature of the API,
+    this method coupled with the config file keep track of the offset through
+    multiple start stops of the scraper.
+    
+    :param 'config' JSON - config data of the scraper class
+    :param 'keyword' str - searched-for keyword
+    :rtype int
+    :return stored offset of a given keyword for a given 
+    """
+  
     if keyword in config[str]:
         return config[str][keyword]
     else:
         config[str][keyword] = 0
         return 0
+      
+      
 def profile_data_try(profile_data, public_id):
+    """
+    The returned data of the linkedin API is not always 100% populated,
+    every now and again there is a missing field from the data. In that case
+    you would get a KeyError when trying to access the missing field using dict[key]
+    this method makes it so our data is 100% populated in terms of fields,
+    and if there is a hole upon later visiting it can be caught with "if not var:"
+    instead of having try-excepts everywhere.
+    
+    :param 'profile_data' JSON - raw data returned by api.get_profile()
+    :param 'public_id' str - unique identifier of linkedin profile
+    
+    :rtype JSON
+    :return re-orginized/formatted data to be aggregated to main data
+    """
+  
     ret_data = {}
     ret_data[public_id] = {}
 
@@ -59,7 +88,12 @@ def profile_data_try(profile_data, public_id):
     ret_data[public_id]["checked"] = True
     return ret_data
 
+   
 def jsonSetCombiner(jsonObjs):
+    """
+    Im leaving this here cause i wrote it in place of simply using .update(),
+    and it makes me laugh at my waste of time
+    """
     ret_data = jsonObjs[0]
     count = 1
     for jsonObj in jsonObjs:
@@ -106,8 +140,10 @@ def get_unchecked_profiles(central_data):
 
     :param 'central_data' JSON
 
-    :rtype 
+    :rtype List[str]
+    :return list of public_ids not yet scraped
     """
+  
     unchecked_profiles = []
     for profile in central_data:
         if not central_data[profile]["checked"]:
@@ -186,6 +222,11 @@ def add_key_value(data, key, value):
     """
     Adds a key value pair to dict
 
+
+    :param 'data' JSON
+    :param 'key' str
+    :param 'value' any
+    
     :return dict with added key-value pair
     :rtype dict
     """
