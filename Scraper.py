@@ -6,7 +6,7 @@ https://linkedin-api.readthedocs.io/en/latest/api.html
 https://github.com/tomquirk/linkedin-api
 """
 
-from dataOOP import (
+from data import (
     get_offset,
     profile_data_try,
     jsonSetCombiner,
@@ -38,9 +38,10 @@ def default_evade():
 
     sleep(30 + random.random()*3.5)
 
+    
 class Linkedin_scraper(object):
     """
-    The following is a Linkedin Scaper
+    The following is a Linkedin Scraper
     The software scrapes broadly for a given keyword
     extracts data from related job listings and profiles
     """
@@ -67,6 +68,7 @@ class Linkedin_scraper(object):
         debug=False,
     ):
         """Constructor"""
+        
         if not profile_data:
             self.profile_data = self.open_file(self._PATH_TO_PROFILE_DATA_)
         if not job_data:
@@ -79,13 +81,6 @@ class Linkedin_scraper(object):
             self.config = self.checkConfig()
 
         self.use_proxies=use_proxies
-
-        """
-        for login in config, if not get_cookies: login to each and store cookies,
-        if challenge, run challenge.py
-
-        probably going to need extensive functionality for automated account setup
-        """
 
         logging.basicConfig(level=logging.DEBUG if debug else logging.INFO)
         self.logger = self.logger
@@ -131,6 +126,7 @@ class Linkedin_scraper(object):
             self.profile_data = add_search_to_main(self.profile_data, search_data)
 
         close_proxies(instance_id)
+        write_files()
 
 
     def scrape_profiles_base(self, login, proxy, unchecked, result_queue):
@@ -172,7 +168,8 @@ class Linkedin_scraper(object):
     def scrape_profiles(self):
         unchecked = get_unchecked_profiles()
         self.profile_status = jsonSetCombiner(self.profile_data, self.thread_scraping(self.scrape_profiles_base, unchecked))
-
+        write_files()
+        
 
     def search_jobs(self, keyword):
         """
@@ -205,14 +202,15 @@ class Linkedin_scraper(object):
             self.logger.info(f"{email} searching for {keyword} related jobs")
             
             search_data = api.search_jobs(keyword, offset=offset)
-            offset += len(search_data)
 
-            self.updateConfig({"job_keyword": {keyword: offset}}, email=email, searches=self._SEARCH_LIMIT_TOTAL_)
+            self.updateConfig({"job_keyword": {keyword: (offset+len(search_data))}}, email=email, searches=self._SEARCH_LIMIT_TOTAL_)
 
             self.job_data = job_data_search(self.job_data, search_data)
 
             close_proxies(instance_ids[index])
+        write_files()
 
+            
     def scrape_jobs_base(self, login, proxy, unchecked, result_queue):
         """
         Again very similar to the scrape_profiles_base function. wont go into it here.
@@ -249,6 +247,7 @@ class Linkedin_scraper(object):
     def scrape_jobs(self):
         unchecked = get_unscraped_jobs(self.job_data)
         self.job_data = self.thread_scraping(self.scrape_jobs_base, unchecked)
+        write_files()
 
 
     def thread_scraping(self, function, unchecked):
@@ -282,13 +281,16 @@ class Linkedin_scraper(object):
         close_proxies(instance_ids)
 
         return result_queue.get()
-
-
-    def checkConfig(self):
-        self.open_file(self._PATH_TO_PROFILE_DATA_)
-
+    
 
     def open_file(self, _path_):
+        """
+        Catches errors upon first start
+        
+        :param '__path__' str - path to local file
+        :rtype: bool/Json
+        :return if error False - else JSON
+        """
         try:
             with open(_path_, 'r') as f:
                 return json.loads(f.read())
@@ -296,6 +298,7 @@ class Linkedin_scraper(object):
             #initiate file
             with open(_path_, 'w') as f:
                 pass
+            return False
         except json.JSONDecodeError:
             return False
 
@@ -350,21 +353,25 @@ class Linkedin_scraper(object):
 
 
     def email_checker(self, email, int):
+        """
+        Checks if a given email is valid for more scraping/searching. Scraping/searching is denoted by a given int.
+        These values reset if the scraper is run a day after the previous invocation.
+        
+        :param 'email' str - Login info for scraper account
+        :param 'int' int - check for searching/scraping
+        
+        :rtype bool
+        :return if the email is under the unoffical api limits
+        """
         if int == 1:
-            if self.config["logins"][email]["profile_visits"] < self._PROFILE_LIMIT_TOTAL__ and self.config["logins"][email]["launches"] < self._LAUNCH_LIMIT_:
+            if self.config["logins"][email]["profile_visits"] < self._PROFILE_LIMIT_TOTAL__:
                 return True
             return False
         if int == 2:
-            if self.config["logins"][email]["searches"] < self._SEARCH_LIMIT_TOTAL_ and self.config["logins"][email]["launches"] < self._LAUNCH_LIMIT_:
+            if self.config["logins"][email]["searches"] < self._SEARCH_LIMIT_TOTAL_:
                 return True
             return False
-        if int == 3:
-            if self.config["logins"][email]["profile_visits"] < self._PROFILE_LIMIT_TOTAL__ and self.config["logins"][email]["launches"] < self._LAUNCH_LIMIT_ and self.config["logins"][email]["searches"] < self._SEARCH_LIMIT_TOTAL_:
-                return True
-            return False
-        else:
-            raise ValueError("Email Checker; Invalid Int")
-
+        
 
     def updateConfig(self, data_dict=None, email=None, profile_visits=None, searches=None, launches=None):
         if data_dict:
@@ -393,7 +400,7 @@ class Linkedin_scraper(object):
         This method also attempts to login and gain cached cookies, if it fails 
         the scraper doesnt work.
 
-        THIS FUNCTION ATTEMPTS TO HANDLE CHALLENGE EXCEPTION -
+        - THIS FUNCTION ATTEMPTS TO HANDLE CHALLENGE EXCEPTION -
         the solution barely ever works, but sometimes it does,
         better than nothing
 
