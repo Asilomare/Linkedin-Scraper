@@ -23,7 +23,7 @@ def login(email, password):
 
 
 def verify_pin(soup):
-    pin = input('Check the PIN in your inbox and enter here:\n')
+    pin = input(f"Check the PIN in {email}'s inbox and enter here:\n")
     payload = {
         'csrfToken': soup.find('input', {'name': 'csrfToken'})['value'],
         'pageInstance': soup.find('input', {'name': 'pageInstance'})['value'],
