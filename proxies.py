@@ -17,7 +17,8 @@ def start_proxies(num_proxies, use_proxies):
     This resolves the need to spin up new instances every time
     saves a little time and a little money
 
-
+    :param 'num_proxies' int - # of proxy servers started
+    :param 'use_proxies' bool - Whether or not the scraper class instance is using proxies
     :return proxy servers
     :rtype List of length 2, 1: list of dicts, 2: list of str
     """
@@ -103,6 +104,9 @@ def wait_instances_running(ec2, instance_ids):
     Waits for instances to return an 'instanceState' of 'Running'. Then ideally wait
     till a file called installationcomplete to be created but that wasnt working so
     just sleeps for awhile until tiny-proxy servers are downloaded
+    
+    :param 'ec2' Boto3 client
+    :param 'instance_ids' List[str] - ids of instances to check 
     """
 
     while True:
