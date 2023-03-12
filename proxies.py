@@ -2,7 +2,7 @@ import boto3
 import requests
 from time import sleep
 region = 'us-east-1'
-def start_proxies(num_proxies, use_proxies):
+def start_proxies(num_proxies, use_proxies, logger):
     """
     This method requests new instances from user's AWS account. Ubuntu 18.04, t1.micro
     It passes userdata to install tinyproxy software, aswell as adding the user's ip to
@@ -17,8 +17,7 @@ def start_proxies(num_proxies, use_proxies):
     This resolves the need to spin up new instances every time
     saves a little time and a little money
 
-    :param 'num_proxies' int - # of proxy servers started
-    :param 'use_proxies' bool - Whether or not the scraper class instance is using proxies
+
     :return proxy servers
     :rtype List of length 2, 1: list of dicts, 2: list of str
     """
@@ -63,6 +62,8 @@ def start_proxies(num_proxies, use_proxies):
     instance_type = 't1.micro' # Smallest possible ec2 for frugality
     security_group_id = 'sg-0a516230e5c68aad3'#currently not portable, 
 
+    logger.info(f"{num_proxies} proxy servers started")
+
     response = ec2.run_instances(ImageId=ami_id,
         InstanceType=instance_type,
         #KeyName=key_name,
@@ -103,10 +104,7 @@ def wait_instances_running(ec2, instance_ids):
     """
     Waits for instances to return an 'instanceState' of 'Running'. Then ideally wait
     till a file called installationcomplete to be created but that wasnt working so
-    just sleeps for awhile until tiny-proxy servers are downloaded
-    
-    :param 'ec2' Boto3 client
-    :param 'instance_ids' List[str] - ids of instances to check 
+    just sleeps for awhile until tiny-proxy software are downloaded
     """
 
     while True:
@@ -131,24 +129,10 @@ def wait_instances_running(ec2, instance_ids):
         sleep(10)
     sleep(110)
 
-def close_proxies(instance_ids, use_proxies):
+def close_proxies(instance_ids, use_proxies, logger):
     if not use_proxies:
         return
     ec2 = boto3.client('ec2', region_name=region)
-    response = ec2.terminate_instances(InstanceIds=instance_ids)
+    ec2.terminate_instances(InstanceIds=instance_ids)
+    logger.info(f"{len(instance_ids)} proxy servers terminated")
     ec2.close()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

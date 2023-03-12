@@ -21,13 +21,14 @@ from proxies import (
     close_proxies
 )
 from challenge import login as challenge_login
-
 import logging
 import json
 from time import sleep, time
 import random
 import queue
 import threading
+
+logger = logging.getLogger(__name__)
 
 def default_evade():
     """
@@ -54,9 +55,7 @@ class Linkedin_scraper(object):
     _PATH_TO_CONFIG_ = "config.json"
     _PATH_TO_LOGINS_ = "input.txt"
 
-    use_proxies = True
-
-    logger = logging.getLogger(__name__)
+    
 
     def __init__(
         self,
@@ -65,25 +64,28 @@ class Linkedin_scraper(object):
         job_data=None,
         config=None,
         use_proxies=True,
-        debug=False,
+        debug=False
     ):
+        logging.basicConfig(level=logging.DEBUG if debug else logging.INFO)
+        logging.getLogger("botocore").setLevel(logging.CRITICAL)
+        self.logger = logger
+
         """Constructor"""
         
         if not profile_data:
+            self.logger.info("Accessing profile datafile")
             self.profile_data = self.open_file(self._PATH_TO_PROFILE_DATA_)
         if not job_data:
+            self.logger.info("Accessing job datafile")
             self.job_data = self.open_file(self._PATH_TO_JOB_DATA_)
         if not config:
-            if not self.checkConfig():
+            if not self.open_file(self._PATH_TO_CONFIG_):
                 #if getting error, must populate input.txt file with usernames and passwords
-                #print usernames is asterickeed out passwords
                 self.construct_config_file()
-            self.config = self.checkConfig()
+            self.config = self.open_file(self._PATH_TO_CONFIG_)
 
-        self.use_proxies=use_proxies
-
-        logging.basicConfig(level=logging.DEBUG if debug else logging.INFO)
-        self.logger = self.logger
+        self.use_proxies = use_proxies
+        self.debug = debug
 
 
     def search_profiles(self, keyword):
@@ -98,35 +100,36 @@ class Linkedin_scraper(object):
         see https://linkedin-api.readthedocs.io/en/latest/api.html#linkedin_api.Linkedin.search_people
         """
 
-        logins = self.get_available_logins()
+        logins = self.get_available_logins(2)
 
-        proxies, instance_id = start_proxies(len(logins), self.use_proxies)
+        proxies, instance_id = start_proxies(len(logins), self.use_proxies, self.logger)
 
         for index, email in enumerate(logins):
         
+            #add use_cookies checker
             api = Linkedin(email, '',
                 proxies=proxies[index],
-                debug=self.debug
+                debug=self.debug,
                 )
 
             self.logger.info(f"{email} is searching for {keyword}")
 
             offset = get_offset(self.config, keyword, "profile_keyword")
 
-            search_data = api.search_profiles(keyword, offset=offset)
+            search_data = api.search_people(keyword, offset=offset)
 
             self.updateConfig({"profile_keyword": {keyword: (offset+len(search_data))}}, email=email, searches=self._SEARCH_LIMIT_TOTAL_)
 
             # when offset var offset gets too big, skips too many results
-            if len(search_data < 3):
+            if len(search_data) < 3:
                 self.logger.info(f"{keyword}, all results scraped")
                 break
 
             #pulls methods from data.py and uses self.profile_Data, also updates file and self.profile_Data
-            self.profile_data = add_search_to_main(self.profile_data, search_data)
+            self.profile_data = add_search_to_main(self.profile_data, search_data, email)
 
-        close_proxies(instance_id)
-        write_files()
+        close_proxies(instance_id, self.logger)
+        self.write_files()
 
 
     def scrape_profiles_base(self, login, proxy, unchecked, result_queue):
@@ -167,13 +170,14 @@ class Linkedin_scraper(object):
 
     def scrape_profiles(self):
         unchecked = get_unchecked_profiles()
-        self.profile_status = jsonSetCombiner(self.profile_data, self.thread_scraping(self.scrape_profiles_base, unchecked))
-        write_files()
+        logins = self.get_available_logins(2)
+        self.profile_status = jsonSetCombiner(self.profile_data, self.thread_scraping(self.scrape_profiles_base, unchecked, logins))
+        self.write_files()
         
 
     def search_jobs(self, keyword):
         """
-        Basically Identical to search_profiles method. Searches for any and all job listings
+        Nearly Identical to search_profiles method. Searches for any and all job listings
         related to the keyword. spins up proxies 
 
         Again, it's worth noting that the basis of this functions Linkedin.search_jobs() has
@@ -186,11 +190,11 @@ class Linkedin_scraper(object):
 
         self.logger.info("Commencing Job Search")
 
-        logins = self.get_available_logins()
+        logins = self.get_available_logins(2)
 
         offset = get_offset(self.config, keyword, "job_keyword")
 
-        proxies, instance_ids = start_proxies(len(logins), self.use_proxies)
+        proxies, instance_ids = start_proxies(len(logins), self.use_proxies, self.logger)
 
         for index, email in enumerate(logins):
 
@@ -207,8 +211,9 @@ class Linkedin_scraper(object):
 
             self.job_data = job_data_search(self.job_data, search_data)
 
-            close_proxies(instance_ids[index])
-        write_files()
+            close_proxies(instance_ids[index], self.logger)
+
+        self.write_files()
 
             
     def scrape_jobs_base(self, login, proxy, unchecked, result_queue):
@@ -246,11 +251,12 @@ class Linkedin_scraper(object):
 
     def scrape_jobs(self):
         unchecked = get_unscraped_jobs(self.job_data)
-        self.job_data = self.thread_scraping(self.scrape_jobs_base, unchecked)
-        write_files()
+        logins =self.get_available_logins(1)
+        self.job_data = self.thread_scraping(self.scrape_jobs_base, unchecked, logins)
+        self.write_files()
 
 
-    def thread_scraping(self, function, unchecked):
+    def thread_scraping(self, function, unchecked, logins):
         """
         This function uses multi-threading to 'concurrently' run
         different scraper instances. Distributes egress traffic through
@@ -263,10 +269,9 @@ class Linkedin_scraper(object):
         the 
         """
 
-        logins = self.get_available_logins(1)
         len_logins = len(logins)
 
-        proxies, instance_ids = start_proxies(len_logins, self.use_proxies)
+        proxies, instance_ids = start_proxies(len_logins, self.use_proxies, self.logger)
         divided_list = self.divide_list(unchecked, len_logins)
 
         threads = []
@@ -278,7 +283,7 @@ class Linkedin_scraper(object):
         for thread in threads:
             thread.join()
 
-        close_proxies(instance_ids)
+        close_proxies(instance_ids, self.logger)
 
         return result_queue.get()
     
@@ -297,6 +302,7 @@ class Linkedin_scraper(object):
         except FileNotFoundError:
             #initiate file
             with open(_path_, 'w') as f:
+                self.logger.info(f"Making {_path_} file")
                 pass
             return False
         except json.JSONDecodeError:
@@ -401,8 +407,8 @@ class Linkedin_scraper(object):
         the scraper doesnt work.
 
         - THIS FUNCTION ATTEMPTS TO HANDLE CHALLENGE EXCEPTION -
-        the solution barely ever works, but sometimes it does,
-        better than nothing
+        The solution is by no means full proof but it should work sometimes
+        see https://github.com/tomquirk/linkedin-api/issues/109
 
         Extracts user inputed username/login from input file
         Starts proxies to login and store cookies for each username:password
@@ -416,7 +422,7 @@ class Linkedin_scraper(object):
         with open(self._PATH_TO_LOGINS_, 'r') as f:
             logins = {}
             for line in f.readlines():
-                if line[0] == '#':
+                if line[0] == '#':#checks if line is commented out
                     continue
                 try:
                     nline = line.split(":")
@@ -424,10 +430,8 @@ class Linkedin_scraper(object):
                 except Exception:
                     raise ValueError("Invalid Login Format")
         
-        proxies, instance_ids = start_proxies(len(logins), self.use_proxies)
-
-        self.logger.info(f"{len(proxies)} proxy servers started")
-
+        proxies, instance_ids = start_proxies(len(logins), self.use_proxies, self.logger)
+    
         config = {}
         config['logins'] = {}
         config['update_time'] = 0
@@ -440,16 +444,18 @@ class Linkedin_scraper(object):
 
             try:
                 Linkedin(username, logins[username],
-                        #debug=False,
+                        debug=self.debug,
                         proxies=proxies[index]
                     )
                 
             except ChallengeException:
                 challenge_login(username, logins[username])
 
-            close_proxies(instance_ids[index])
+            close_proxies(instance_ids[index], self.logger)
 
             self.logger.info(f"{instance_ids[index]} server closed")
 
         with open(self._PATH_TO_CONFIG_, 'w') as f:
             f.write(json.dumps(config, indent=4))
+        
+        self.config = config

@@ -1,40 +1,34 @@
- 
 def get_offset(config, keyword, str):
     """
-    when a keyword is searched for the initial results are always the same,
-    so we skip the initial results using the offset feature of the API,
-    this method coupled with the config file keep track of the offset through
-    multiple start stops of the scraper.
-    
-    :param 'config' JSON - config data of the scraper class
-    :param 'keyword' str - searched-for keyword
-    :rtype int
-    :return stored offset of a given keyword for a given 
+    Gets offset from config, if key isnt there generates the key with 0-value
+
+    :param 'config' JSON - config state of scraper
+    :param 'keyword' str - keyword of search
+    :param 'str' str - "profile_keyword"/"job_keyword" different offsets for same keyword in people/jobs
+
     """
-  
     if keyword in config[str]:
         return config[str][keyword]
     else:
         config[str][keyword] = 0
         return 0
-      
-      
+    
 def profile_data_try(profile_data, public_id):
     """
-    The returned data of the linkedin API is not always 100% populated,
-    every now and again there is a missing field from the data. In that case
-    you would get a KeyError when trying to access the missing field using dict[key]
-    this method makes it so our data is 100% populated in terms of fields,
-    and if there is a hole upon later visiting it can be caught with "if not var:"
-    instead of having try-excepts everywhere.
-    
-    :param 'profile_data' JSON - raw data returned by api.get_profile()
-    :param 'public_id' str - unique identifier of linkedin profile
-    
+    API response data isn't always populated, and when trying to access a key 
+    that will be there 90% of the time will result in a KeyError 10% of the time
+
+    This function makes sure that the stored data is 100% populated, and instead of 
+    try-except structure a simple 'if not' statement can catch bad data.
+
+    Also renames variables and does very basic data enriching
+
+    :param 'profile_data' JSON - Raw API response
+    :param 'public_id' str 
     :rtype JSON
-    :return re-orginized/formatted data to be aggregated to main data
+    :return reformatted/ideally-structured/populated profile data
     """
-  
+
     ret_data = {}
     ret_data[public_id] = {}
 
@@ -88,31 +82,18 @@ def profile_data_try(profile_data, public_id):
     ret_data[public_id]["checked"] = True
     return ret_data
 
-   
 def jsonSetCombiner(jsonObjs):
     """
-    Im leaving this here cause i wrote it in place of simply using .update(),
-    and it makes me laugh at my waste of time
-    """
-    ret_data = jsonObjs[0]
-    count = 1
-    for jsonObj in jsonObjs:
-        if count == len(jsonObjs):
-            break
-        ret_data = jsonCombine2(ret_data, jsonObjs[count])
-        count += 1
-    return ret_data
+    Combines set of json objs
 
-def jsonCombine2(jsonObj, jsonObjAppend):
-    for append_profile in jsonObjAppend:
-        append_id = list(append_profile.keys())[0]
-        for main_profile in jsonObj:
-            main_id = list(main_profile.keys())[0]
-            if main_id == append_id:
-                for metadata in append_profile[append_id]:
-                    main_profile[main_id][metadata] = append_profile[append_id][metadata]
-                break
-    return jsonObj
+    :param 'jsonObjs' list[JSON]
+    :rtype JSON
+    :return combined JSON obj
+    """
+
+    for index, jsonObj in enumerate(jsonObjs, 1):
+        ret_data = jsonObj.update(jsonObjs[index])
+    return ret_data
 
 def update_json(data, update_data):
     """
@@ -140,10 +121,8 @@ def get_unchecked_profiles(central_data):
 
     :param 'central_data' JSON
 
-    :rtype List[str]
-    :return list of public_ids not yet scraped
+    :rtype 
     """
-  
     unchecked_profiles = []
     for profile in central_data:
         if not central_data[profile]["checked"]:
@@ -185,7 +164,7 @@ def add_search_to_main(main_data, search_data, email):
 
 def reformat_json(data):
     """
-    Reformats json data
+    Reformats Voyager API's raw-response's JSON data
 
     :Original
     {
@@ -222,11 +201,6 @@ def add_key_value(data, key, value):
     """
     Adds a key value pair to dict
 
-
-    :param 'data' JSON
-    :param 'key' str
-    :param 'value' any
-    
     :return dict with added key-value pair
     :rtype dict
     """
@@ -264,8 +238,9 @@ class hashabledict(dict):
 
 def format_job_data(data):
     """
-    Reformats job data to be paired with job urn. Grabs urn from urn string
+    Reformats job data to be paired with job urn. 
 
+    Wrote this awhile ago and don't feel like rewriting
 
     :param 'data' dict
     :return reformatted json data
@@ -395,6 +370,14 @@ def unique(list1):
 
 import datetime
 def get_experience_local(profile_data):
+    """
+    Data enriching - takes difference in time from first job latest job
+
+    :param 'profile_data' JSON - Raw API response
+    :rtype int
+    :return number of years in workforce
+    """
+
     today = datetime.date.today()
     CURRENT_YEAR = today.year
     experience = profile_data["experience"]
@@ -411,6 +394,14 @@ def get_experience_local(profile_data):
     return CURRENT_YEAR-start
 
 def get_unscraped_jobs(job_data):
+    """
+    Help method for scraper.scrap_jobs_base() - checks stored data for jobs
+    whose key 'scraped' is false.
+
+    :param 'job_data' JSON - stored job data
+    :rtype list
+    :return jobs who have not been visited yet
+    """
     ret_data = []
     for company in job_data:
         for job in job_data[company]:
