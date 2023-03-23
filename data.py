@@ -82,18 +82,25 @@ def profile_data_try(profile_data, public_id):
     ret_data[public_id]["checked"] = True
     return ret_data
 
-def jsonSetCombiner(jsonObjs):
+def jsonSetCombiner(main_data, jsonObjs):
     """
     Combines set of json objs
 
+    :param main_data JSON - structured class data
     :param 'jsonObjs' list[JSON]
     :rtype JSON
     :return combined JSON obj
     """
 
-    for index, jsonObj in enumerate(jsonObjs, 1):
-        ret_data = jsonObj.update(jsonObjs[index])
-    return ret_data
+    for jsonObj in jsonObjs:
+        main_data.update(jsonObj)
+    return main_data
+
+def company_jsonSetCombiner(job_data, jsonObjs):
+    for jsonObj in jsonObjs:
+        for company in jsonObj:
+            job_data[company]["companyData"]=jsonObj[company]["companyData"]
+    return job_data
 
 def update_json(data, update_data):
     """
@@ -105,6 +112,7 @@ def update_json(data, update_data):
     :return The updated dictionary
     :rtype dict
     """
+
     for key, value in update_data.items():
         if isinstance(value, dict):
             if key in data:
@@ -123,6 +131,7 @@ def get_unchecked_profiles(central_data):
 
     :rtype 
     """
+
     unchecked_profiles = []
     for profile in central_data:
         if not central_data[profile]["checked"]:
@@ -146,16 +155,17 @@ def add_search_to_main(main_data, search_data, email):
 
     # new public ids
     search_data_profiles = []
-    new_search_data = []
     for item in search_data:
         public_id = item["public_id"]
+        if not main_data:
+            continue
         if public_id not in main_data:
             search_data_profiles.append(item)
 
-    reformatted_search_data = reformat_json(new_search_data)
+    reformatted_search_data = reformat_json(search_data_profiles if main_data else search_data)
 
-    #scraped/checked checker
-    ret_data = add_key_value(reformatted_search_data, "checked", False)
+   
+    ret_data = add_key_value(reformatted_search_data, "checked", False) #scraped/checked checker
     ret_data = add_key_value(ret_data, "email_used", email)
 
     if main_data:
@@ -225,11 +235,21 @@ def add_key_value(data, key, value):
     return data
 
 def job_data_search(main_data, raw_data):
+    """
+    Aggregates new data to old data, supports no old data.
+    simple filtering and fomratting
+
+    :param 'main_data' JSON - structured job data
+    :param 'raw_data' raw-JSON - raw return data from api
+    :rtype JSON
+    :return Strucuted/aggregated/filtered data
+    """
+
     if not main_data:
         return format_job_data(raw_data)
     formatted = format_job_data(raw_data)
     ret_data = aggregate_job_data(main_data, formatted)
-
+    return ret_data
 
 class hashabledict(dict):
     def __hash__(self):
@@ -322,7 +342,6 @@ def aggregate_job_data(main_data, new_data):
     old_job_urns = get_job_urns(main_data)
 
     for new_company in new_data:
-
         # old comapny
         if new_company in main_data:
             for job in new_data[new_company]:
@@ -410,3 +429,88 @@ def get_unscraped_jobs(job_data):
             if not job_data[company][job]["scraped"]:
                 ret_data.append(job)
     return ret_data
+
+def divide_list(lst, num_parts):
+    """
+    Divides list into smaller lists, given number of parts
+
+    :param 'lst' list - list to be divided
+    :param 'num_parts' int - num of parts list to be divided into
+    :rtype list[lists]]
+    :return list divided into smaller equal lists
+    """
+
+    # Calculate the length of each sublist
+    sublist_length = len(lst) // num_parts
+
+    # Calculate the number of sublists that will have one extra element
+    num_long_sublists = len(lst) % num_parts
+
+    # Initialize the list of sublists
+    sublists = []
+
+    # Create the sublists
+    start_idx = 0
+    for i in range(num_parts):
+        # Determine the length of this sublist
+        sublist_len = sublist_length + (1 if i < num_long_sublists else 0)
+
+        # Add the sublist to the list of sublists
+        sublists.append(lst[start_idx:start_idx+sublist_len])
+
+        # Update the starting index for the next sublist
+        start_idx += sublist_len
+
+    return sublists
+
+def get_unchecked_companies(job_data):
+    """
+    Fetches companys for scrape_companies_base
+    
+    :param 'job_data' JSON
+    :rtype list
+    :return un-scraped companies
+    """
+
+    unchecked_company = []
+    for company in job_data:
+        if "companyData" not in job_data[company]:
+            unchecked_company.append(company)
+    return unchecked_company
+
+def company_data_agg(company_data, urn, ret):
+
+    ret[urn] = {}
+    ret[urn]["companyData"] = {}
+
+    try:
+        ret[urn]["companyData"]["companySize"] = company_data["staffCount"]
+    except KeyError:
+        try:
+            ret[urn]["companyData"]["companySize"] = company_data["staffCountRange"]
+        except KeyError:
+            ret[urn]["companyData"]["companySize"] = False
+
+    try:
+        ret[urn]["companyData"]["url"] = company_data["companyPageUrl"]
+    except KeyError:
+        try:
+            ret[urn]["companyData"]["url"] = company_data["callToAction"]["url"]
+        except KeyError:
+            ret[urn]["companyData"]["url"] = False
+
+    try:
+        write_list = []
+        for industry in company_data["companyIndustries"]:
+            write_list.append(industry["localizedName"])
+        ret[urn]["companyData"]["industries"] = write_list
+    except KeyError:
+        ret[urn]["companyData"]["industries"] = False
+
+    try:
+        ret[urn]["companyData"]["followerCount"] = company_data["followingInfo"]["followerCount"]
+    except KeyError:
+        print("followerCountError")
+        ret[urn]["companyData"]["followerCount"]
+
+    return ret
