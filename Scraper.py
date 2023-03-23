@@ -566,8 +566,4 @@ class Linkedin_scraper(object):
         
         proxies, instance_id = start_proxies(1, self.use_proxies, self.logger)
 
-        #api = Linkedin("armank5563847387@gmail.com", "", proxies=proxies[0], debug=True)
-
-       # print(json.dumps(api.get_profile_network_info("harrison-hirehive"), indent=4))
-
         close_proxies(instance_id, self.logger)
